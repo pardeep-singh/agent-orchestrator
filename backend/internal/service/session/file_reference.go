@@ -105,6 +105,12 @@ func (s *Service) ResolveFileReference(ctx context.Context, id domain.SessionID,
 					relocated.Reason = "renamed"
 					return relocated, nil
 				}
+				if relocated.State == "changed" {
+					// Git established the new identity even though the selection no
+					// longer has a verified range. Open this path without highlighting.
+					relocated.Path = candidate
+					return relocated, nil
+				}
 			}
 		}
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -192,5 +193,58 @@ func TestFileReferenceRejectsObsoletePRSnapshotBeforeReadingSource(t *testing.T)
 	result, err := (&Service{store: store}).ResolveFileReference(context.Background(), "ao-1", ref)
 	if err != nil || result.State != "unavailable" || result.Reason != "snapshot_changed" {
 		t.Fatalf("result %+v %v", result, err)
+	}
+}
+
+func TestFileReferenceFollowsGitRenameWithChangedSelection(t *testing.T) {
+	for _, tt := range []struct{ name, content, reason string }{
+		{name: "modified", content: "header\nmodified();\n"},
+		{name: "ambiguous", content: "selected();\nmodified();\nselected();\n", reason: "ambiguous"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := newWorkspaceRepo(t)
+			padding := strings.Repeat("unchanged context padding padding\n", 20)
+			if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("header\nselected();\n"+padding), 0600); err != nil {
+				t.Fatal(err)
+			}
+			runGit(t, repo, "add", "README.md")
+			runGit(t, repo, "commit", "-m", "selection fixture")
+			runGit(t, repo, "mv", "README.md", "RENAMED.md")
+			if err := os.WriteFile(filepath.Join(repo, "RENAMED.md"), []byte(tt.content+padding), 0600); err != nil {
+				t.Fatal(err)
+			}
+			svc := workspaceReviewService(t, repo)
+			manifest, err := svc.GetWorkspaceManifest(context.Background(), "ao-1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			recognized := false
+			for _, file := range manifest.Files {
+				if file.Path == "RENAMED.md" && file.PreviousPath == "README.md" {
+					recognized = true
+				}
+			}
+			if !recognized {
+				t.Fatal("fixture must establish the Git rename identity")
+			}
+			ref := ports.ChatFileReference{ID: "rename-changed", SessionID: "ao-1", Path: "README.md", Source: ports.ChatFileReferenceSource{Kind: "workspace"}, Scope: "combined", Side: "file", EndSide: "file", Line: 2, EndLine: 2, Lines: []ports.ChatFileReferenceLine{{Kind: "context", Side: "file", OldNo: intPointer(2), NewNo: intPointer(2), Text: "selected();"}}}
+			result, err := svc.ResolveFileReference(context.Background(), "ao-1", ref)
+			if err != nil || result.State != "changed" || result.Path != "RENAMED.md" || result.Reason != tt.reason {
+				t.Fatalf("renamed selection: %+v, %v", result, err)
+			}
+			if result.Line != 0 || result.EndLine != 0 || result.OldLineOffset != 0 || result.NewLineOffset != 0 {
+				t.Fatalf("changed selection must not provide a highlight range: %+v", result)
+			}
+			if ref.Path != "README.md" || ref.Line != 2 || ref.EndLine != 2 || ref.Lines[0].Text != "selected();" || *ref.Lines[0].NewNo != 2 {
+				t.Fatal("rewrote captured reference")
+			}
+			if err := os.Remove(filepath.Join(repo, "RENAMED.md")); err != nil {
+				t.Fatal(err)
+			}
+			result, err = svc.ResolveFileReference(context.Background(), "ao-1", ref)
+			if err != nil || result.State != "unavailable" || result.Path != "" {
+				t.Fatalf("deleted rename should not open: %+v, %v", result, err)
+			}
+		})
 	}
 }

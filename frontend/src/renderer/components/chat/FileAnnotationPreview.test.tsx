@@ -175,3 +175,18 @@ it("does not open a file deleted between preview and click", async () => {
  expect(open).not.toHaveBeenCalled();
  expect(screen.queryByRole("button",{name:/^Open file:/})).not.toBeInTheDocument();
 });
+
+
+it.each([undefined, "ambiguous"])("opens a verified renamed but changed file (%s) without rewriting capture", async (reason) => {
+ const resolution={state:"changed",path:"src/renamed.ts",reason};
+ request.mockResolvedValue({data:resolution});
+ const open=vi.fn();setup(open);
+ fireEvent.click(screen.getByRole("button",{name:"1 annotation"}));
+ const card=await screen.findByRole("button",{name:/^Open file: src\/a.ts/});
+ fireEvent.click(card);
+ await waitFor(()=>expect(open).toHaveBeenCalledWith(ref,resolution));
+ expect(request).toHaveBeenCalledTimes(2);
+ expect(ref.path).toBe("src/a.ts");
+ expect(ref.lines[0].text).toBe("captured();");
+ expect(resolution).not.toHaveProperty("line");
+});
