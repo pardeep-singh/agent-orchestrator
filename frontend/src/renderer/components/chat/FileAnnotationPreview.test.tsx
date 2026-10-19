@@ -48,7 +48,7 @@ it("rechecks before opening and cancels an older click", async () => {
 		generation = { current: 0 };
 	setup(open, generation);
 	fireEvent.click(screen.getByRole("button", { name: "1 annotation" }));
-	const button = await screen.findByRole("button", { name: /^Open selected lines:/ });
+	const button = await screen.findByRole("button", { name: /^Open file:/ });
 	let finish!: (value: unknown) => void;
 	request.mockImplementationOnce(
 		() =>
@@ -63,8 +63,7 @@ it("rechecks before opening and cancels an older click", async () => {
 	expect(open).not.toHaveBeenCalled();
 	request.mockResolvedValueOnce({ data: { state: "changed" } });
 	fireEvent.click(button);
-	await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Source changed"));
-	expect(open).not.toHaveBeenCalled();
+	await waitFor(() => expect(open).toHaveBeenCalledWith(ref, { state: "changed" }));
 });
 
 it("opens from the whole annotation and supports keyboard activation", async () => {
@@ -73,12 +72,12 @@ it("opens from the whole annotation and supports keyboard activation", async () 
 	const open = vi.fn();
 	setup(open);
 	await user.click(screen.getByRole("button", { name: "1 annotation" }));
-	await screen.findByRole("button", { name: /^Open selected lines: src\/a.ts/ });
+	await screen.findByRole("button", { name: /^Open file: src\/a.ts/ });
 	expect(screen.queryByText("Open selected lines")).not.toBeInTheDocument();
 	await user.click(screen.getByText("captured();"));
 	await waitFor(() => expect(open).toHaveBeenCalledOnce());
 	await user.click(screen.getByRole("button", { name: "1 annotation" }));
-	(await screen.findByRole("button", { name: /^Open selected lines: src\/a.ts/ })).focus();
+	(await screen.findByRole("button", { name: /^Open file: src\/a.ts/ })).focus();
 	await user.keyboard("{Enter}");
 	await waitFor(() => expect(open).toHaveBeenCalledTimes(2));
 });
@@ -88,7 +87,7 @@ it("keeps capture-truncated references static even if the resolver reports uncha
 	setup(vi.fn(), { current: 0 }, { ...ref, truncated: true });
 	fireEvent.click(screen.getByRole("button", { name: "1 annotation" }));
 	await waitFor(() => expect(request).toHaveBeenCalledOnce());
-	expect(screen.queryByRole("button", { name: /^Open selected lines:/ })).not.toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: /^Open file:/ })).not.toBeInTheDocument();
 	expect(screen.getByText("Captured selection truncated")).toBeInTheDocument();
 });
 
@@ -115,11 +114,35 @@ it("blocks navigation after revalidation rejects the annotation", async () => {
  request.mockResolvedValue({data:{state:"unchanged",path:ref.path,line:1,endLine:1}});
  const open=vi.fn();setup(open);
  fireEvent.click(screen.getByRole("button",{name:"1 annotation"}));
- const card=await screen.findByRole("button",{name:/^Open selected lines:/});
+ const card=await screen.findByRole("button",{name:/^Open file:/});
  request.mockResolvedValueOnce({error:{code:"CHAT_FILE_REFERENCE_INVALID"}});
  fireEvent.click(card);
  await waitFor(()=>expect(screen.getByRole("status")).toHaveTextContent("Selection could not be validated"));
  expect(open).not.toHaveBeenCalled();
- expect(screen.queryByRole("button",{name:/^Open selected lines:/})).not.toBeInTheDocument();
+ expect(screen.queryByRole("button",{name:/^Open file:/})).not.toBeInTheDocument();
  expect(screen.getByText("captured();")).toBeInTheDocument();
+});
+
+
+it("opens a changed source after revalidation without replacing captured code", async () => {
+ request.mockResolvedValue({data:{state:"changed"}});
+ const open=vi.fn();setup(open);
+ fireEvent.click(screen.getByRole("button",{name:"1 annotation"}));
+ const card=await screen.findByRole("button",{name:/^Open file:/});
+ fireEvent.click(card);
+ await waitFor(()=>expect(open).toHaveBeenCalledWith(ref,{state:"changed"}));
+ expect(request).toHaveBeenCalledTimes(2);
+ expect(ref.lines[0].text).toBe("captured();");
+});
+
+it("does not open a file deleted between preview and click", async () => {
+ request.mockResolvedValue({data:{state:"changed"}});
+ const open=vi.fn();setup(open);
+ fireEvent.click(screen.getByRole("button",{name:"1 annotation"}));
+ const card=await screen.findByRole("button",{name:/^Open file:/});
+ request.mockResolvedValueOnce({data:{state:"unavailable"}});
+ fireEvent.click(card);
+ await waitFor(()=>expect(screen.getByRole("status")).toHaveTextContent("Source unavailable"));
+ expect(open).not.toHaveBeenCalled();
+ expect(screen.queryByRole("button",{name:/^Open file:/})).not.toBeInTheDocument();
 });

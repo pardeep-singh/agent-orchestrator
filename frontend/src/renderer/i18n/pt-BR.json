@@ -3268,5 +3268,6 @@
 	"chat.fileAnnotationInvalid": "Não foi possível validar a seleção. Remova-a e adicione-a novamente.",
 	"chat.fileAnnotationCheckFailed": "A verificação da origem falhou. Tente novamente mais tarde.",
 	"chat.fileAnnotationOpen": "Open selected lines",
+	"chat.fileAnnotationOpenFile": "Open file",
 	"chat.fileAnnotationChangedDuringOpen": "Source changed while opening. Reopen the annotation to view the captured selection."
 }

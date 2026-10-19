@@ -49,7 +49,7 @@ it("keeps expansion, code selection, and drag gestures separate from navigation"
  const user = userEvent.setup();
  const onOpen = vi.fn();
  render(<CapturedFileAnnotation reference={reference(Array.from({ length: 9 }, (_, i) => `line ${i}`))} onOpen={onOpen} />);
- const card = screen.getByRole("button", { name: /^Open selected lines:/ });
+ const card = screen.getByRole("button", { name: /^Open file:/ });
  const toggle = screen.getByRole("button", { name: "Show more" });
  toggle.focus();
  await user.keyboard("{Enter}");

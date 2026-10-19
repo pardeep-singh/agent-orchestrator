@@ -42,13 +42,13 @@ function ResolvedPreview({reference,context,onNavigate}:{reference:ChatFileRefer
  const state=query.isError ? undefined : query.data?.state;
  const failureStatus=query.error?.message==="CHAT_FILE_REFERENCE_INVALID" ? "chat.fileAnnotationInvalid" : "chat.fileAnnotationCheckFailed";
  return <CapturedPreview reference={reference} status={query.isError ? failureStatus : state==="changed" ? "chat.fileAnnotationChanged" : state==="unavailable" ? "chat.fileAnnotationUnavailable" : undefined} opening={opening}
-  onOpen={context.onOpen && state==="unchanged" && !reference.truncated ? async()=>{
+  onOpen={context.onOpen && (state==="unchanged" || state==="changed") && !reference.truncated ? async()=>{
    const generation=context.generation;
    const token=generation ? ++generation.current : 0;
    setOpening(true);
    try {
     const fresh=await query.refetch();
-    if(!mounted.current || (generation && generation.current!==token) || fresh.error || fresh.data?.state!=="unchanged") return;
+    if(!mounted.current || (generation && generation.current!==token) || fresh.error || (fresh.data?.state!=="unchanged" && fresh.data?.state!=="changed")) return;
     context.onOpen?.(reference,fresh.data);
     onNavigate?.();
    } finally {if(mounted.current)setOpening(false)}

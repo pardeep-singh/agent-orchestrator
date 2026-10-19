@@ -330,7 +330,7 @@ test("file annotations show captured code and open a verified selected range", a
  await askButton(page).getByRole("button",{name:"Add to chat"}).click();
  await expect(composer).toBeVisible();
  await page.getByRole("button",{name:"1 annotation"}).click();
- await expect(page.getByRole("button",{name:/^Open selected lines:/})).toBeVisible();
+ await expect(page.getByRole("button",{name:/^Open file:/})).toBeVisible();
  await expect(page.locator("pre").filter({hasText:"const value4 = 4;"}).last()).toBeVisible();
  const preview=page.getByRole("dialog").locator("pre");
  await preview.evaluate(element=>{
@@ -351,7 +351,7 @@ test("file annotations show captured code and open a verified selected range", a
  await expect(row(page,CENTER,3)).not.toHaveAttribute("data-selected-line");
  await page.getByRole("tab",{name:/Add to chat/}).click();
  await page.getByRole("button",{name:"1 annotation"}).click();
- await page.getByRole("button",{name:/^Open selected lines:/}).focus();
+ await page.getByRole("button",{name:/^Open file:/}).focus();
  await page.keyboard.press("Enter");
  await expect(row(page,CENTER,3)).toHaveAttribute("data-selected-line");
  await row(page,CENTER,8).click();
@@ -428,7 +428,7 @@ test("mixed diff annotations preserve the new side of trailing context",async({p
  await selectText(page,row(page,REVIEW,5,"change-deletion"),row(page,REVIEW,8));
  await askButton(page).getByRole("button",{name:"Add to chat"}).click();
  await page.getByRole("button",{name:"1 annotation"}).click();
- await page.getByRole("button",{name:/^Open selected lines:/}).click();
+ await page.getByRole("button",{name:/^Open file:/}).click();
  expect(selected?.endSide).toBe("new");
  expect(selected?.lines.at(-1)).toMatchObject({kind:"context",side:"new",oldNo:7,newNo:8});
  await expect(row(page,CENTER,5,"change-deletion")).toHaveAttribute("data-selected-line");
@@ -448,7 +448,38 @@ test("opens and highlights a CRLF selection containing blank rows", async ({page
  await selectText(page,row(page,CENTER,13),row(page,CENTER,17));
  await askButton(page).getByRole("button",{name:"Add to chat"}).click();
  await page.getByRole("button",{name:"1 annotation"}).click();
- await page.getByRole("button",{name:/^Open selected lines:/}).click();
+ await page.getByRole("button",{name:/^Open file:/}).click();
  for(const n of [13,14,15,16,17])await expect(row(page,CENTER,n)).toHaveAttribute("data-selected-line");
  expect(captured?.lines.map(row=>row.text)).toEqual(["services:","","  web:"," \t","    image: example"]);
+});
+
+
+test("changed annotations open the file without a highlight and missing files stay closed",async({page})=>{
+ await openChatSession(page);
+ let state="unchanged";
+ await page.route("**/conversation/file-references/resolve",route=>{
+  const ref=route.request().postDataJSON() as ChatFileReference;
+  return route.fulfill({json:{state,path:ref.path,line:ref.line,endLine:ref.endLine,side:ref.side}});
+ });
+ await selectText(page,row(page,REVIEW,3),row(page,REVIEW,4));
+ await askButton(page).getByRole("button",{name:"Add to chat"}).click();
+ await page.getByRole("button",{name:"1 annotation"}).click();
+ await page.getByRole("button",{name:/^Open file:/}).click();
+ await expect(row(page,CENTER,3)).toHaveAttribute("data-selected-line");
+ state="changed";
+ await page.getByRole("tab",{name:/Add to chat/}).click();
+ await page.getByRole("button",{name:"1 annotation"}).click();
+ await expect(page.getByRole("dialog").getByRole("status")).toContainText("Source changed");
+ await page.getByRole("button",{name:/^Open file:/}).click();
+ await expect(page.locator(CENTER)).toBeVisible();
+ await expect(row(page,CENTER,3)).not.toHaveAttribute("data-selected-line");
+ await expect(row(page,CENTER,4)).not.toHaveAttribute("data-selected-line");
+ state="unavailable";
+ await page.getByRole("tab",{name:/Add to chat/}).click();
+ await page.getByRole("button",{name:"1 annotation"}).click();
+ await expect(page.getByRole("dialog").getByRole("status")).toContainText("Source unavailable");
+ await expect(page.getByRole("button",{name:/^Open file:/})).toHaveCount(0);
+ await page.getByRole("dialog").locator("pre").click();
+ await expect(page.getByRole("dialog")).toBeVisible();
+ await expect(page.locator(CENTER)).not.toBeVisible();
 });
